@@ -21,7 +21,7 @@ if (supportsGetters) {
     var getInferredName;
     try {
       // eslint-disable-next-line no-new-func
-      getInferredName = Function("s", "return { [s]() {} }[s].name;");
+      getInferredName = Function("s", "var v = s.valueOf(); return { [v]() {} }[v].name;");
       // eslint-disable-next-line no-empty
     } catch (e) {}
 
@@ -55,15 +55,42 @@ if (supportsGetters) {
         // 3. Return sym.[[Description]].
         if (supportsInferredNames) {
           var name = getInferredName(sym);
-          if (name === "") {
-            return undefined;
+          if (name !== "") {
+            return name.slice(1, -1); // name.slice('['.length, -']'.length);
           }
-          return name.slice(1, -1); // name.slice('['.length, -']'.length);
         }
 
         var string = sym.toString();
-        return string.slice(7, string.length - 1);
+
+        if (emptySymbolLookup[string] !== undefined) {
+          return emptySymbolLookup[string];
+        }
+
+        if (string.indexOf("__\x01symbol:") === 0) {
+          var randomStartIndex = string.lastIndexOf("0.");
+          string = string.slice(10, randomStartIndex);
+        } else {
+          string = string.slice(7, string.length - 1);
+        }
+        if (string === "") {
+          return undefined
+        }
+        return string
       }
     });
+
+
+    var emptySymbolLookup = {};
+    var OrigSymbol = Symbol
+    var NewSymbol = function Symbol() {
+      var description = arguments[0];
+      var sym = OrigSymbol(description);
+      if (description !== undefined && (description === null || isNaN(description) || String(description) === "")) {
+        emptySymbolLookup[sym.toString()] = String(description)
+      }
+      return sym
+    }
+    NewSymbol.prototype = Symbol.prototype
+    Symbol = NewSymbol // eslint-disable-line no-native-reassign, no-global-assign
   })();
 }
